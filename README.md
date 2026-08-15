@@ -13,15 +13,4 @@ The simulation consists of six core modules:
 5. **tracking.py**: Radar sensor simulation and Kalman filter
 6. **run_sim.py**: Main simulation loop with logging and visualization
 
-Optional advanced module:
-7. **rl_guidance.py**: Reinforcement learning (PPO) guidance comparison
 
-## Installation
-
-```bash
-# Create virtual environment (optional)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
