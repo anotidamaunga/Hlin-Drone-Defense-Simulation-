@@ -11,6 +11,7 @@ SIM_DURATION = 30.0  # Total simulation time (seconds)
 G = 9.81  # Gravity (m/s^2)
 MASS = 1.0  # Drone mass (kg)
 MAX_TILT = 0.3  # Maximum tilt angle (radians) ~17 degrees
+MAX_THRUST = 20.0
 
 # Position controller gains (PD)
 KP_XY = 2.0  # Proportional gain for x,y
@@ -47,6 +48,6 @@ KALMAN_R_POS = 1.0  # Position measurement noise
 RADAR_NOISE_STD = 0.5  # Standard deviation of position noise (m)
 
 # RL training parameters (advanced module)
-RL_TOTAL_TIMESTEPS = 200000
+RL_TOTAL_TIMESTEPS = 1000000
 RL_LEARNING_RATE = 0.0003
 RL_EVAL_EPISODES = 50
