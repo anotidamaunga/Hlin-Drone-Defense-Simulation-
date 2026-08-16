@@ -285,7 +285,7 @@ class DroneDefenseSimulationHybrid:
             threat_to_target = np.linalg.norm(
                 self.threat_state[:3] - np.array(self.config.PROTECTED_ZONE)
             )
-            if threat_to_target < 3.0:
+            if threat_to_target < self.config.PROTECTED_ZONE_RADIUS:
                 self.termination_reason = 'threat_reached_target'
                 break
             if miss_dist > 100:

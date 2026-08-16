@@ -222,20 +222,25 @@ class HlinVisualizer:
                                (screen_x, screen_y), 6, 2)
 
     def draw_protected_zone(self, surface):
-        """Draw the protected zone."""
+        """Draw the protected zone, sized to the actual breach radius
+        (config.PROTECTED_ZONE_RADIUS) in world units rather than a fixed
+        pixel size, so it scales correctly with zoom and visibly reflects
+        how big the defended area actually is."""
         px, py = self.config.PROTECTED_ZONE[:2]
         screen_x, screen_y = self.world_to_screen(px, py)
+        scale = 1.0 / self.zoom
+        radius_px = max(5, int(getattr(self.config, 'PROTECTED_ZONE_RADIUS', 15.0) * scale))
 
-        # Pulsing circle
-        pulse = 5 * (1 + 0.3 * np.sin(pygame.time.get_ticks() / 500))
+        # Pulsing ring at the true breach radius, small solid center marker
+        pulse = 0.06 * radius_px * (1 + 0.3 * np.sin(pygame.time.get_ticks() / 500))
         pygame.draw.circle(surface, self.COLORS['protected_zone'],
-                           (screen_x, screen_y), int(15 + pulse), 3)
+                           (screen_x, screen_y), int(radius_px + pulse), 3)
         pygame.draw.circle(surface, self.COLORS['protected_zone'],
                            (screen_x, screen_y), 5)
 
         # Label
         label = self.font_small.render("Protected Zone", True, self.COLORS['protected_zone'])
-        surface.blit(label, (screen_x - 30, screen_y - 30))
+        surface.blit(label, (screen_x - 30, screen_y - radius_px - 20))
 
     def draw_telemetry(self, surface):
         """Draw telemetry data in the side panel."""
@@ -664,7 +669,7 @@ class HlinPygameSimulation:
                 threat_to_target = np.linalg.norm(
                     self.sim.threat_state[:3] - np.array(self.config.PROTECTED_ZONE)
                 )
-                if threat_to_target < 3.0:
+                if threat_to_target < self.config.PROTECTED_ZONE_RADIUS:
                     self.sim.termination_reason = 'threat_reached_target'
                 elif miss_dist > 100:
                     self.sim.termination_reason = 'too_far'
