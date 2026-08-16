@@ -32,6 +32,14 @@ PROTECTED_ZONE = [0.0, 0.0, 0.0]  # Target location
 INTERCEPTOR_INITIAL_POS = [0.0, 0.0, 0.0]
 INTERCEPTOR_INITIAL_VEL = [0.0, 0.0, 0.0]
 
+# Intercept success radius: proximity-fuze style "close enough" rather than
+# requiring an exact collision. Real kinetic counter-UAS effectors (airburst
+# rounds, proximity-fused interceptors) detonate within a lethal radius of
+# the target instead of needing a direct hit — 2.0m was effectively modeling
+# a physical collision, which is a much harder (and less realistic) target
+# than how these systems actually claim a kill.
+INTERCEPT_RADIUS = 5.0  # meters
+
 # Proportional Navigation guidance
 PN_NAVIGATION_CONSTANT = 4.0  # N (tunable, typically 3-5)
 PN_CLOSING_VELOCITY_MIN = 0.5  # Minimum closing velocity (m/s)
