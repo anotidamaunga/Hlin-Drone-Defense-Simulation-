@@ -35,6 +35,14 @@ THREAT_EVASION_AMPLITUDE = 15.0  # meters (desired-position offset at zero
 THREAT_INITIAL_POS = [50.0, 50.0, 20.0]  # Starting position (m)
 PROTECTED_ZONE = [0.0, 0.0, 0.0]  # Target location
 
+# Radius (m) around PROTECTED_ZONE the threat must reach to count as a
+# successful breach (threat_reached_target failure condition). A real
+# defended asset has physical extent, not a single point -- widening this
+# gives the threat a bigger area to aim for/break into rather than needing
+# to converge on one exact coordinate, and correspondingly makes the
+# interceptor's job of covering that whole area harder.
+PROTECTED_ZONE_RADIUS = 15.0  # meters
+
 # Interceptor initial state
 INTERCEPTOR_INITIAL_POS = [0.0, 0.0, 0.0]
 INTERCEPTOR_INITIAL_VEL = [0.0, 0.0, 0.0]
