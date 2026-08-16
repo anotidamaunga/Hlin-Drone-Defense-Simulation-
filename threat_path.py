@@ -31,12 +31,27 @@ class ThreatPathGenerator:
         self.target = np.array(config.PROTECTED_ZONE)
         self.initial_pos = np.array(config.THREAT_INITIAL_POS)
 
-    def get_desired_position(self, t):
+        # Reactive evasion : steer away
+        # from the interceptor's live position once it's within threat awareness radius
+
+        self.evasion_awareness_radius = getattr(
+            config, 'THREAT_EVASION_AWARENESS_RADIUS', 25.0)
+        self.evasion_amplitude = getattr(
+            config, 'THREAT_EVASION_AMPLITUDE', 15.0)
+
+    def get_desired_position(self, t, threat_pos=None, interceptor_pos=None):
         """
         Get desired position at time t.
 
         Args:
             t: Time (s)
+            threat_pos: [x, y, z] the threat's actual current position.
+                Together with interceptor_pos, enables reactive evasion —
+                without both, this returns the same purely time-scripted
+                path as before (backward compatible for callers that don't
+                track live interceptor state, e.g. plotting/analysis code).
+            interceptor_pos: [x, y, z] the interceptor's actual current
+                position, to evade away from.
 
         Returns:
             desired_pos: [x, y, z] desired position
@@ -51,8 +66,9 @@ class ThreatPathGenerator:
             direction = np.array([0, 0, 0])
 
         # Drift progress: move toward target at constant speed
-        # Clamp to prevent overshoot
-        drift_pos = self.initial_pos + direction * self.drift_speed * t
+
+        progress = min(self.drift_speed * t, dist)
+        drift_pos = self.initial_pos + direction * progress
 
         # Add sinusoidal sway in y and z
         sway_y = self.sway_amplitude * np.sin(self.sway_frequency * t)
@@ -70,6 +86,19 @@ class ThreatPathGenerator:
             drift_pos[2] + sway_z + jink_z
         ])
 
+        # Reactive evasion: push the desired position directly away from the interceptor
+        if threat_pos is not None and interceptor_pos is not None:
+            away = np.array(threat_pos) - np.array(interceptor_pos)
+            range_to_interceptor = np.linalg.norm(away)
+            if 1e-6 < range_to_interceptor < self.evasion_awareness_radius:
+                evasion_strength = (
+                    (self.evasion_awareness_radius - range_to_interceptor)
+                    / self.evasion_awareness_radius
+                )
+                desired_pos = (desired_pos +
+                                (away / range_to_interceptor) *
+                                evasion_strength * self.evasion_amplitude)
+
         return desired_pos
 
     def _unit_direction(self):
@@ -82,7 +111,17 @@ class ThreatPathGenerator:
 
     def get_velocity_at_time(self, t, dt=0.001):
         """
-        Analytic velocity at time t (closed-form derivative of get_desired_position).
+        Analytic velocity at time t (closed-form derivative of the
+        drift/sway/jink terms in get_desired_position).
+
+        Deliberately excludes the reactive evasion term's derivative: that
+        offset depends on the live interceptor position, which isn't a
+        smooth function of t alone, so there's no clean closed form. The
+        position controller's proportional (pos_error) term still responds
+        to the evasion offset via desired position even without a matching
+        velocity feedforward here -- it just tracks it slightly less
+        crisply, which reads as reasonable "startled reaction" lag rather
+        than a bug.
 
         Args:
             t: Time (s)
@@ -92,7 +131,8 @@ class ThreatPathGenerator:
             velocity: [vx, vy, vz] velocity at time t
         """
         direction = self._unit_direction()
-        drift_vel = direction * self.drift_speed
+        dist = np.linalg.norm(self.target - self.initial_pos)
+        drift_vel = direction * self.drift_speed if self.drift_speed * t < dist else np.zeros(3)
 
         sway_y_dot = self.sway_amplitude * self.sway_frequency * np.cos(self.sway_frequency * t)
         sway_z_dot = -self.sway_amplitude * 0.5 * (self.sway_frequency * 0.7) * \
