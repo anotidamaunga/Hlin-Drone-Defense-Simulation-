@@ -40,6 +40,9 @@ INTERCEPTOR_INITIAL_VEL = [0.0, 0.0, 0.0]
 # than how these systems actually claim a kill.
 INTERCEPT_RADIUS = 5.0  # meters
 
+
+BEST_MODEL_PATH = "./models/best_model.zip"
+
 # Proportional Navigation guidance
 PN_NAVIGATION_CONSTANT = 4.0  # N (tunable, typically 3-5)
 PN_CLOSING_VELOCITY_MIN = 0.5  # Minimum closing velocity (m/s)
