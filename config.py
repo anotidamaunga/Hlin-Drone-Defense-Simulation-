@@ -20,11 +20,18 @@ KP_Z = 4.0   # Proportional gain for z
 KD_Z = 2.5   # Derivative gain for z
 
 # Threat path parameters
-THREAT_DRIFT_SPEED = 1.0  # m/s toward protected zone
+THREAT_DRIFT_SPEED = 10.0  # m/s toward protected zone
 THREAT_SWAY_AMPLITUDE = 5.0  # meters
 THREAT_SWAY_FREQUENCY = 0.2  # rad/s
-THREAT_JINK_AMPLITUDE = 2.0  # meters (tunable)
-THREAT_JINK_FREQUENCY = 1.5  # rad/s (tunable)
+
+
+THREAT_JINK_AMPLITUDE = 3.0  # meters (tunable)
+THREAT_JINK_FREQUENCY = 0.5  # rad/s (tunable)
+
+
+THREAT_EVASION_AWARENESS_RADIUS = 25.0  # meters
+THREAT_EVASION_AMPLITUDE = 15.0  # meters (desired-position offset at zero
+
 THREAT_INITIAL_POS = [50.0, 50.0, 20.0]  # Starting position (m)
 PROTECTED_ZONE = [0.0, 0.0, 0.0]  # Target location
 
@@ -32,12 +39,7 @@ PROTECTED_ZONE = [0.0, 0.0, 0.0]  # Target location
 INTERCEPTOR_INITIAL_POS = [0.0, 0.0, 0.0]
 INTERCEPTOR_INITIAL_VEL = [0.0, 0.0, 0.0]
 
-# Intercept success radius: proximity-fuze style "close enough" rather than
-# requiring an exact collision. Real kinetic counter-UAS effectors (airburst
-# rounds, proximity-fused interceptors) detonate within a lethal radius of
-# the target instead of needing a direct hit — 2.0m was effectively modeling
-# a physical collision, which is a much harder (and less realistic) target
-# than how these systems actually claim a kill.
+
 INTERCEPT_RADIUS = 5.0  # meters
 
 
