@@ -205,9 +205,13 @@ class InterceptorEnv(gym.Env):
         # Clamp position to keep in bounds
         self.interceptor_state[:3] = np.clip(self.interceptor_state[:3], -10, 100)
 
-        # Move threat drone according to path
+        # Move threat drone according to path reactive evasion
+
         t = self.step_count * self.dt
-        threat_desired = self.threat_path.get_desired_position(t)
+        threat_desired = self.threat_path.get_desired_position(
+            t, threat_pos=self.threat_state[:3],
+            interceptor_pos=self.interceptor_state[:3]
+        )
         threat_vel = self.threat_path.get_velocity_at_time(t)
 
         # Position controller for threat (follows path)
