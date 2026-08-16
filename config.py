@@ -49,6 +49,10 @@ BEST_MODEL_PATH = "./models/best_model.zip"
 PN_NAVIGATION_CONSTANT = 4.0  # N (tunable, typically 3-5)
 PN_CLOSING_VELOCITY_MIN = 0.5  # Minimum closing velocity (m/s)
 
+# Direct pursuit acceleration used when the interceptor is actually
+# diverging from the target (opening range) rather than closing on it.
+PN_PURSUIT_ACCEL_GAIN = 5.0  # m/s^2
+
 # Kalman filter parameters
 KALMAN_DT = 0.01  # Time step for filter
 # Process noise covariance (Q) - tune these
