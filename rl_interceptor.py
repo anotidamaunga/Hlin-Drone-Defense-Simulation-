@@ -260,7 +260,7 @@ class InterceptorEnv(gym.Env):
         # Failure: threat reached protected zone
         threat_to_target = np.linalg.norm(self.threat_state[:3] -
                                           np.array(self.config.PROTECTED_ZONE))
-        if threat_to_target < 3.0:
+        if threat_to_target < self.config.PROTECTED_ZONE_RADIUS:
             reward -= 50.0  # Penalty for failure
             terminated = True
 
@@ -338,12 +338,35 @@ class InterceptorEnv(gym.Env):
             if reduction > 0:
                 reward += 0.5 * reduction
 
+        # rel_pos/range_mag computed unconditionally (not just inside the
+        # closing-course check below) since the drift-away penalty needs
+        # them regardless of episode step count or exact-zero miss_dist.
+        rel_pos = self.threat_state[:3] - self.interceptor_state[:3]
+        range_mag = np.linalg.norm(rel_pos)
+
         # Bonus for being on intercept course (range decreasing)
         if len(self.miss_distances) > 1 and miss_dist > 0:
-            rel_pos = self.threat_state[:3] - self.interceptor_state[:3]
             rel_vel = self.threat_state[3:] - self.interceptor_state[3:]
             if np.dot(rel_pos, rel_vel) < 0:  # Closing
                 reward += 0.1
+
+        # Penalty for drifting away from the threat when idle: the
+        # interceptor's own velocity component pointing away from the
+        # threat (independent of what the threat itself is doing, unlike
+        # the closing-course bonus above which uses relative velocity).
+        # Without this, a policy trained in an environment where most
+        # episodes resolve quickly (fast threat drift + reactive evasion
+        # mean most engagements are short) gets little experience with an
+        # extended "threat hasn't been caught yet, keep pressing" phase,
+        # and observed behavior was to wander off with increasing speed
+        # once an engagement ran past a quick resolution -- there was
+        # nothing in training to teach it that abandoning pursuit is bad
+        # if the reward stops accumulating fast negative miss-distance
+        # penalties anyway once it's already far away.
+        if range_mag > 1e-6:
+            own_radial_vel = np.dot(self.interceptor_state[3:], rel_pos) / range_mag
+            if own_radial_vel < 0:
+                reward -= 0.2 * abs(own_radial_vel)
 
         # Control effort penalty (minimize acceleration)
         reward -= 0.001 * np.linalg.norm(action)
@@ -458,7 +481,7 @@ class InterceptorAI:
         return env
 
     def train(self, total_timesteps=200000, save_path="./models/",
-              auto_promote=True, models_dir="./models/", promotion_eval_episodes=30):
+              auto_promote=True, models_dir="./models/", promotion_eval_episodes=100):
         """
         Train the PPO agent.
 
@@ -731,7 +754,7 @@ class InterceptorAI:
         return stats
 
 
-def promote_if_best(candidate_dir, models_dir="./models/", n_eval_episodes=30,
+def promote_if_best(candidate_dir, models_dir="./models/", n_eval_episodes=100,
                      best_miss_weight=0.6):
     """
     Evaluate the model in candidate_dir and, if it beats whatever is
@@ -764,22 +787,38 @@ def promote_if_best(candidate_dir, models_dir="./models/", n_eval_episodes=30,
     policy can actually get under favorable conditions, which is why it's
     weighted more heavily (default 0.6) rather than used alone.
 
-    Both stats come from evaluate(), which runs randomized episodes without
-    a fixed seed, so this is a noisy comparison, not a rigorous statistical
-    test — treat n_eval_episodes as a knob to trade eval time for
-    comparison stability, not a guarantee.
+    Evaluation uses run_sim.evaluate_blended() — the full deployment loop
+    (sensor noise, Kalman filtering, blended PN+AI guidance) — not
+    InterceptorAI.evaluate()'s pure-AI-only loop. This used to use
+    evaluate() and it produced a real, costly mistake: a candidate that
+    fixed a genuine behavioral bug (wandering away from the target during
+    extended engagements) scored *worse* on pure-AI evaluate() (3.3% vs the
+    incumbent's 40%) purely because pure-AI performance doesn't predict
+    blended performance, while the same candidate scored dramatically
+    *better* on evaluate_blended() (94% vs 89%) — the metric that actually
+    reflects how the system is used. The gate would have silently rejected
+    the better model. Imported lazily (not at module level) to avoid a
+    circular import: run_sim imports hybrid_guidance, which imports
+    InterceptorAI from this module.
+
+    Both stats come from evaluate_blended(), which runs randomized episodes
+    without a fixed seed, so this is a noisy comparison, not a rigorous
+    statistical test — treat n_eval_episodes as a knob to trade eval time
+    for comparison stability, not a guarantee.
 
     Returns True if candidate_dir was promoted, False otherwise.
     """
+    from run_sim import evaluate_blended
+
     candidate_model = os.path.join(candidate_dir, "best_model.zip")
     if not os.path.exists(candidate_model):
         print(f"No best_model.zip in {candidate_dir}, skipping promotion.")
         return False
 
     print(f"\nEvaluating candidate model in {candidate_dir} for promotion "
-          f"against {models_dir}...")
-    candidate_stats = InterceptorAI(config, model_path=candidate_model).evaluate(
-        n_episodes=n_eval_episodes
+          f"against {models_dir} (blended, deployment-realistic)...")
+    candidate_stats = evaluate_blended(
+        config, model_path=candidate_model, n_episodes=n_eval_episodes
     )
 
     def score(stats):
@@ -820,8 +859,8 @@ def promote_if_best(candidate_dir, models_dir="./models/", n_eval_episodes=30,
         # does) to keep that from recurring.
         print(f"No registry found for the existing model in {models_dir}; "
               f"evaluating it as the baseline...")
-        current_stats = InterceptorAI(config, model_path=current_model).evaluate(
-            n_episodes=n_eval_episodes
+        current_stats = evaluate_blended(
+            config, model_path=current_model, n_episodes=n_eval_episodes
         )
         current_success = current_stats['success_rate']
         current_score = score(current_stats)
@@ -845,12 +884,13 @@ def promote_if_best(candidate_dir, models_dir="./models/", n_eval_episodes=30,
 
         registry = {
             'source_dir': candidate_dir,
-            # evaluate()'s stats are numpy float32/float64 (from
+            'evaluation': 'blended (run_sim.evaluate_blended)',
+            # evaluate_blended()'s stats are numpy float32/float64 (from
             # np.mean/np.min/np.max), which json.dump can't serialize.
             'success_rate': float(candidate_stats['success_rate']),
             'mean_miss_distance': float(candidate_stats['mean_miss_distance']),
             'best_miss': float(candidate_stats['best_miss']),
-            'mean_reward': float(candidate_stats['mean_reward']),
+            'mean_intercept_time': float(candidate_stats['mean_intercept_time']),
             'score': float(candidate_score),
             'best_miss_weight': best_miss_weight,
             'n_eval_episodes': n_eval_episodes,
