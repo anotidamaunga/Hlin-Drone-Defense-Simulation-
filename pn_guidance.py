@@ -24,6 +24,7 @@ class ProportionalNavigation:
         """
         self.N = config.PN_NAVIGATION_CONSTANT
         self.Vc_min = config.PN_CLOSING_VELOCITY_MIN
+        self.pursuit_accel_gain = getattr(config, 'PN_PURSUIT_ACCEL_GAIN', 5.0)
         self.g = config.G
         self.mass = config.MASS
         self.max_tilt = config.MAX_TILT
@@ -57,15 +58,20 @@ class ProportionalNavigation:
         # Relative velocity
         v_rel = np.array(target_vel) - np.array(interceptor_vel)
 
-        # Closing velocity (negative when approaching)
-        Vc = -np.dot(v_rel, los_unit)
-        Vc = max(Vc, self.Vc_min)  # Ensure positive closing velocity
+        # Closing velocity (positive when approaching, negative when opening)
+        Vc_raw = -np.dot(v_rel, los_unit)
 
         # LOS rate: rate of change of LOS angle
         # In 3D, LOS rate vector = (r x v_rel) / (r·r)
         # This gives angular velocity perpendicular to LOS
         los_rate_vector = np.cross(r, v_rel) / (range_mag ** 2)
         los_rate_mag = np.linalg.norm(los_rate_vector)
+
+        if Vc_raw < 0:
+
+            return (los_unit * self.pursuit_accel_gain, los_unit, los_rate_mag)
+
+        Vc = max(Vc_raw, self.Vc_min)
 
         # PN commanded acceleration (perpendicular to LOS)
         # a_cmd = N * Vc * (LOS_rate_vector x LOS_unit)
