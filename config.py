@@ -10,8 +10,14 @@ SIM_DURATION = 30.0  # Total simulation time (seconds)
 # Physical constants
 G = 9.81  # Gravity (m/s^2)
 MASS = 1.0  # Drone mass (kg)
-MAX_TILT = 0.3  # Maximum tilt angle (radians) ~17 degrees
-MAX_THRUST = 20.0
+
+
+MAX_TILT = 0.3  # Maximum tilt angle (radians) ~17 degrees -> ~2.94 m/s^2
+MAX_THRUST = 20.0  # -> ~10.19 m/s^2 vertical
+
+
+INTERCEPTOR_MAX_TILT = 0.5  # radians (~28.6 deg) -> ~4.9 m/s^2 horizontal
+INTERCEPTOR_MAX_THRUST = 30.0  # -> ~20.2 m/s^2 vertical (up)
 
 # Position controller gains (PD)
 KP_XY = 2.0  # Proportional gain for x,y

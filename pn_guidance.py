@@ -27,8 +27,11 @@ class ProportionalNavigation:
         self.pursuit_accel_gain = getattr(config, 'PN_PURSUIT_ACCEL_GAIN', 5.0)
         self.g = config.G
         self.mass = config.MASS
-        self.max_tilt = config.MAX_TILT
-        self.max_thrust = getattr(config, 'MAX_THRUST', None)
+        # The interceptor's own (higher) envelope, not the threat's
+        # MAX_TILT/MAX_THRUST -- see config.py for why these are separate.
+        self.max_tilt = getattr(config, 'INTERCEPTOR_MAX_TILT', config.MAX_TILT)
+        self.max_thrust = getattr(config, 'INTERCEPTOR_MAX_THRUST',
+                                   getattr(config, 'MAX_THRUST', None))
 
     def compute_guidance(self, interceptor_pos, interceptor_vel, target_pos, target_vel):
         """

@@ -254,8 +254,11 @@ class HybridGuidance:
 
         g = self.config.G
         mass = self.config.MASS
-        max_tilt = self.config.MAX_TILT
-        max_thrust = getattr(self.config, 'MAX_THRUST', None)
+        # The interceptor's own (higher) envelope, not the threat's
+        # MAX_TILT/MAX_THRUST -- see config.py for why these are separate.
+        max_tilt = getattr(self.config, 'INTERCEPTOR_MAX_TILT', self.config.MAX_TILT)
+        max_thrust = getattr(self.config, 'INTERCEPTOR_MAX_THRUST',
+                              getattr(self.config, 'MAX_THRUST', None))
 
         theta_cmd = np.clip(accel_cmd[0] / g, -max_tilt, max_tilt)
         phi_cmd = np.clip(-accel_cmd[1] / g, -max_tilt, max_tilt)
@@ -492,7 +495,8 @@ class HybridGuidanceTrainer:
 
         g = self.config.G
         mass = self.config.MASS
-        max_tilt = self.config.MAX_TILT
+        # The interceptor's own (higher) envelope -- see config.py.
+        max_tilt = getattr(self.config, 'INTERCEPTOR_MAX_TILT', self.config.MAX_TILT)
 
         miss = np.inf
         for step in range(steps):

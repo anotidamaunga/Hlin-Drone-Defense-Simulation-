@@ -172,26 +172,20 @@ class InterceptorEnv(gym.Env):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         self.prev_action = action.copy()
 
-        # Interpret action as a commanded acceleration, then convert it to
-        # [T, phi_cmd, theta_cmd] using the same inversion the position
-        # controller relies on, so the RL interceptor is subject to the same
-        # thrust/tilt limits (MAX_TILT) as the PN-guided interceptor. This
-        # keeps AI-vs-PN comparisons apples-to-apples instead of giving the
-        # RL agent an unconstrained kinematic advantage.
+
         accel_cmd = np.array(action)
         g = self.config.G
         mass = self.config.MASS
-        max_tilt = self.config.MAX_TILT
+        max_tilt = getattr(self.config, 'INTERCEPTOR_MAX_TILT', self.config.MAX_TILT)
 
         theta_cmd = np.clip(accel_cmd[0] / g, -max_tilt, max_tilt)
         phi_cmd = np.clip(-accel_cmd[1] / g, -max_tilt, max_tilt)
         T = mass * (accel_cmd[2] + g)
         T = max(T, 0.1)
-        max_thrust = getattr(self.config, 'MAX_THRUST', None)
+        max_thrust = getattr(self.config, 'INTERCEPTOR_MAX_THRUST',
+                              getattr(self.config, 'MAX_THRUST', None))
         if max_thrust is not None:
-            # Match PositionController's cap so the RL agent's vertical
-            # authority is bounded the same way as the PN/threat physics
-            # instead of being ~5x stronger than its tilt-limited xy authority.
+
             T = min(T, max_thrust)
 
         self.interceptor_state = integrate_dynamics(
