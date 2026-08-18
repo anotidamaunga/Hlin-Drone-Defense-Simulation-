@@ -16,7 +16,7 @@ MAX_TILT = 0.3  # Maximum tilt angle (radians) ~17 degrees -> ~2.94 m/s^2
 MAX_THRUST = 20.0  # -> ~10.19 m/s^2 vertical
 
 
-INTERCEPTOR_MAX_TILT = 0.5  # radians (~28.6 deg) -> ~4.9 m/s^2 horizontal
+INTERCEPTOR_MAX_TILT = 1.0  # radians (~57.3 deg) -> ~9.8 m/s^2 horizontal
 INTERCEPTOR_MAX_THRUST = 30.0  # -> ~20.2 m/s^2 vertical (up)
 
 # Position controller gains (PD)
@@ -65,7 +65,7 @@ PN_CLOSING_VELOCITY_MIN = 0.5  # Minimum closing velocity (m/s)
 
 # Direct pursuit acceleration used when the interceptor is actually
 # diverging from the target (opening range) rather than closing on it.
-PN_PURSUIT_ACCEL_GAIN = 5.0  # m/s^2
+PN_PURSUIT_ACCEL_GAIN = 15.0  # m/s^2
 
 # Kalman filter parameters
 KALMAN_DT = 0.01  # Time step for filter
