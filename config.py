@@ -47,7 +47,7 @@ PROTECTED_ZONE = [0.0, 0.0, 0.0]  # Target location
 # gives the threat a bigger area to aim for/break into rather than needing
 # to converge on one exact coordinate, and correspondingly makes the
 # interceptor's job of covering that whole area harder.
-PROTECTED_ZONE_RADIUS = 15.0  # meters
+PROTECTED_ZONE_RADIUS = 7.5  # meters
 
 # Interceptor initial state
 INTERCEPTOR_INITIAL_POS = [0.0, 0.0, 0.0]
