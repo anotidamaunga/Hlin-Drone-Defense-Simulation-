@@ -1,0 +1,12 @@
+{
+  "source_dir": "./models_fixed8/",
+  "evaluation": "blended (run_sim.evaluate_blended)",
+  "success_rate": 15.0,
+  "mean_miss_distance": 12.02393072178965,
+  "best_miss": 4.871368386239326,
+  "mean_intercept_time": 5.567333333333334,
+  "score": 7.732393320459456,
+  "best_miss_weight": 0.6,
+  "n_eval_episodes": 100,
+  "promoted_at": "2026-08-17T00:32:18.828775"
+}

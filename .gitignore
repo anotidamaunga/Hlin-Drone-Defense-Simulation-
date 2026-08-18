@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+pygame_run.log
+training_log*.txt
+
+# TensorBoard/monitor logs from training runs - regenerable
+logs/
+logs_test/
+
+# Intermediate/iterative training checkpoints - regenerable, best_model.zip is what matters
+models_fixed*/
+models_test/
+models/ppo_interceptor_*_steps.zip
