@@ -107,7 +107,14 @@ Kalman noise assumptions, RL training length — lives in `config.py`.
 
 ### Main Problem
 
-Currently, I can not seem to find a way to have the interceptor drone take off fast and deal with the Threat. The slow acceleration
-and the increased protected zone radius is the reason why the success rate is so low. I have tried increasing the Proportional navigation acceleration gain and it still hasn't improved.
-Also the ai only version is fast but eventually misses the mark and performs worse than the proportional navigation only version.A blend of both performed really well, although the success
-rate was still too low.
+Traced the low success rate down to two separate causes, neither of which was the PN navigation gain (raising `PN_PURSUIT_ACCEL_GAIN` alone made no measurable difference in `pn_only` mode — that guidance law is only used while the interceptor is opening range, not during normal pursuit):
+
+1. **Accel authority**: `INTERCEPTOR_MAX_TILT` capped horizontal acceleration well below what the guidance law was actually commanding during hard maneuvers (peak demand exceeded the cap in 100% of episodes tested). Raising it from 0.5 to 1.0 rad roughly doubled `pn_only`'s success rate.
+2. **`PROTECTED_ZONE_RADIUS`**: by far the bigger lever. This sets how close the threat needs to get before it "wins," which directly controls how much time the interceptor has to close the gap — shrinking it from 15m to 7.5m took `pn_only` from ~15-20% to ~80%+ success, with zero other changes.
+
+The AI (`ai_only`) side never reliably worked: across several from-scratch PPO retrains (including reward-function fixes, a behavior-cloning warm start from PN, and a 4x longer 4M-step run), the trained policy either stayed near-0% standalone or, once its commanded acceleration grew large enough to matter, actively *hurt* results when blended with PN. Blended mode occasionally beat `pn_only` by a few points, but never consistently or by a margin larger than sampling noise — see "What I learnt" below.
+
+### What I learnt
+
+Sometimes its important to leave systems as they are and not try to force AI where it doesn't increase performance, if we do want to add it, we should have it at the edges of the
+autonomy stack and not make it the central component of our system

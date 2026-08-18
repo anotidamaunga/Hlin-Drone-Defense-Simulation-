@@ -54,7 +54,7 @@ INTERCEPTOR_INITIAL_POS = [0.0, 0.0, 0.0]
 INTERCEPTOR_INITIAL_VEL = [0.0, 0.0, 0.0]
 
 
-INTERCEPT_RADIUS = 5.0  # meters
+INTERCEPT_RADIUS = 3.0  # meters
 
 
 BEST_MODEL_PATH = "./models/best_model.zip"

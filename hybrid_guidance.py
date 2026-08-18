@@ -359,9 +359,17 @@ class NNAdaptor(nn.Module):
         features_tensor = torch.FloatTensor(features_batch)
         targets_tensor = torch.FloatTensor(targets_batch)
 
-        # Forward pass
+        # Forward pass. self.network's raw output is a sigmoid in (0, 1);
+        # forward()/predict() rescale it to [n_min, n_max] before use, but
+        # targets_tensor holds raw N values (2-8) -- comparing the
+        # unrescaled sigmoid output directly against those (as this used to
+        # do) puts an unminimizable floor on the loss, since the network
+        # can never represent a target like 8 from a (0,1)-bounded output.
+        # Rescale the prediction the same way forward() does before scoring
+        # it against the raw-N target.
         predictions = self.network(features_tensor)
-        loss = nn.MSELoss()(predictions, targets_tensor)
+        predictions_scaled = self.n_min + predictions * (self.n_max - self.n_min)
+        loss = nn.MSELoss()(predictions_scaled, targets_tensor)
 
         # Backward pass
         self.optimizer.zero_grad()
@@ -451,9 +459,16 @@ class HybridGuidanceTrainer:
                     best_miss = miss
                     best_N = N
 
-            # Generate features for this scenario
+            # Generate features for this scenario. Interceptor velocity is
+            # genuinely zero here (episode start, matching
+            # INTERCEPTOR_INITIAL_VEL), but the threat is not stationary --
+            # it has real drift/sway velocity from t=0 -- so rel_vel (and
+            # therefore closing_vel below) using a hardcoded zero instead of
+            # the threat's actual initial velocity was leaving those
+            # features dead/uninformative for every sample.
             rel_pos = np.array(threat_pos) - np.array(interceptor_pos)
-            rel_vel = np.array([0, 0, 0]) - np.array([0, 0, 0])
+            threat_vel_0 = self.threat_path.get_velocity_at_time(0)
+            rel_vel = np.array(threat_vel_0) - np.array([0, 0, 0])
             range_mag = np.linalg.norm(rel_pos)
 
             features = [
@@ -497,6 +512,8 @@ class HybridGuidanceTrainer:
         mass = self.config.MASS
         # The interceptor's own (higher) envelope -- see config.py.
         max_tilt = getattr(self.config, 'INTERCEPTOR_MAX_TILT', self.config.MAX_TILT)
+        max_thrust = getattr(self.config, 'INTERCEPTOR_MAX_THRUST',
+                              getattr(self.config, 'MAX_THRUST', None))
 
         miss = np.inf
         for step in range(steps):
@@ -526,6 +543,8 @@ class HybridGuidanceTrainer:
             theta_cmd = np.clip(accel[0] / g, -max_tilt, max_tilt)
             phi_cmd = np.clip(-accel[1] / g, -max_tilt, max_tilt)
             T = max(mass * (accel[2] + g), 0.1)
+            if max_thrust is not None:
+                T = min(T, max_thrust)
 
             interceptor_state = integrate_dynamics(
                 interceptor_state, [T, phi_cmd, theta_cmd], dt,

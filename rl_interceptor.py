@@ -381,12 +381,7 @@ class EngagementCurriculumCallback(BaseCallback):
     engagement_min/max) over the course of training, from a short, easy
     range up to the full operational range.
 
-    A sparse terminal bonus for reaching a rarely-visited state (miss_dist
-    < 2m) provides zero learning signal until the policy actually reaches
-    that state at least once. Starting episodes close lets the agent
-    experience real intercepts early and get gradient from them, then the
-    band widens as it gets better, so it isn't stuck training exclusively
-    on the hardest version of the task from step one.
+
     """
 
     def __init__(self, total_timesteps, start_range=(15.0, 30.0),
@@ -448,28 +443,90 @@ class InterceptorAI:
         env = Monitor(env, "./logs/")
         return env
 
+    def behavior_clone_from_pn(self, n_episodes=200, epochs=15,
+                               batch_size=256, lr=1e-3):
+        """
+        Warm-start self.model's policy toward PN guidance before PPO
+        fine-tuning, via supervised regression on PN's own commanded
+        acceleration (rather than letting PPO discover pursuit behavior
+        from a zero-mean random initialization).
+        """
+        from pn_guidance import ProportionalNavigation
+
+        if self.model is None or self.vec_env is None:
+            raise RuntimeError(
+                "behavior_clone_from_pn() requires self.model/self.vec_env "
+                "to already exist -- call from inside train() after PPO "
+                "model creation."
+            )
+
+        pn = ProportionalNavigation(self.config)
+        n_envs = self.vec_env.num_envs
+        action_low = self.vec_env.action_space.low
+        action_high = self.vec_env.action_space.high
+
+        print(f"\nBehavior-cloning warm start: collecting ~{n_episodes} "
+              f"PN-flown episodes across {n_envs} parallel envs...")
+
+        obs_buf = []
+        act_buf = []
+
+        obs = self.vec_env.reset()
+        episodes_done = 0
+        while episodes_done < n_episodes:
+            raw_envs = [e.unwrapped for e in self.vec_env.venv.envs]
+            actions = np.zeros((n_envs, 3), dtype=np.float32)
+            for i, env in enumerate(raw_envs):
+                accel_cmd, _, _ = pn.compute_guidance(
+                    env.interceptor_state[:3], env.interceptor_state[3:],
+                    env.threat_state[:3], env.threat_state[3:]
+                )
+                actions[i] = np.clip(accel_cmd, action_low, action_high)
+
+            obs_buf.append(obs.copy())
+            act_buf.append(actions.copy())
+
+            obs, rewards, dones, infos = self.vec_env.step(actions)
+            episodes_done += int(np.sum(dones))
+
+        obs_arr = np.concatenate(obs_buf, axis=0)
+        act_arr = np.concatenate(act_buf, axis=0)
+        print(f"Collected {obs_arr.shape[0]} (obs, expert_action) pairs.")
+
+        device = self.model.device
+        obs_t_all = torch.as_tensor(obs_arr, dtype=torch.float32, device=device)
+        act_t_all = torch.as_tensor(act_arr, dtype=torch.float32, device=device)
+
+        optimizer = torch.optim.Adam(self.model.policy.parameters(), lr=lr)
+        n_samples = obs_t_all.shape[0]
+
+        for epoch in range(epochs):
+            perm = torch.randperm(n_samples)
+            total_loss = 0.0
+            for start in range(0, n_samples, batch_size):
+                idx = perm[start:start + batch_size]
+                obs_batch = obs_t_all[idx]
+                act_batch = act_t_all[idx]
+
+                dist = self.model.policy.get_distribution(obs_batch)
+                pred_mean = dist.distribution.mean
+                loss = torch.nn.functional.mse_loss(pred_mean, act_batch)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item() * obs_batch.shape[0]
+
+            print(f"  BC epoch {epoch + 1}/{epochs}: "
+                  f"mse={total_loss / n_samples:.4f}")
+
+        print("Behavior-cloning warm start complete.\n")
+
     def train(self, total_timesteps=200000, save_path="./models/",
-              auto_promote=True, models_dir="./models/", promotion_eval_episodes=100):
+              auto_promote=True, models_dir="./models/", promotion_eval_episodes=100,
+              bc_pretrain_episodes=0, bc_epochs=15):
         """
         Train the PPO agent.
-
-        Args:
-            total_timesteps: Number of timesteps to train
-            save_path: Directory to save models
-            auto_promote: If True (default), evaluate the freshly-trained
-                model against whatever is currently in models_dir after
-                training completes, and promote it (copy final_model.zip +
-                vec_normalize.pkl into models_dir, update the registry) if
-                it's actually better. This matters because every other
-                module in this codebase (run_sim.py, compare_ai_vs_pn, the
-                interactive menu, hybrid_guidance.py's test functions) all
-                hardcode models_dir/final_model.zip as the model they load —
-                training a better model does nothing for the rest of the
-                sim until it's promoted here. Set False for quick
-                smoke-test runs you don't want influencing the "best model."
-            models_dir: Directory treated as the canonical "best model"
-                location (see promote_if_best).
-            promotion_eval_episodes: Episode count for the comparison eval.
         """
         print("=" * 60)
         print("Training AI Interceptor with PPO")
@@ -533,6 +590,10 @@ class InterceptorAI:
             device='auto'
         )
 
+        if bc_pretrain_episodes > 0:
+            self.behavior_clone_from_pn(n_episodes=bc_pretrain_episodes,
+                                         epochs=bc_epochs)
+
         print("\nStarting training...")
         print(f"Total timesteps: {total_timesteps}")
         print(f"Using {self.vec_env.num_envs} parallel environments")
@@ -573,17 +634,7 @@ class InterceptorAI:
         self.model = PPO.load(model_path, device='auto')
         self.model_path = model_path
 
-        # Training wraps the env in VecNormalize(norm_obs=True), so the
-        # policy expects normalized observations. Load the matching running
-        # stats (saved alongside the model as vec_normalize.pkl) so
-        # predict() can normalize raw observations the same way, instead of
-        # handing the policy inputs far outside the distribution it was
-        # trained on. Without this, HybridGuidance/AIInterceptorSimulation
-        # (i.e. run_sim.py, visualizer_pygame.py, ai_only/blended modes)
-        # feed the model unnormalized observations directly -- this is what
-        # caused ai_only mode to diverge in a run_sim.py side-by-side test
-        # while blended (partially averaged with PN's non-learned control
-        # law) and evaluate() (which already normalizes) stayed stable.
+
         self.vec_normalize = None
         vec_normalize_path = os.path.join(os.path.dirname(model_path) or ".", "vec_normalize.pkl")
         if os.path.exists(vec_normalize_path):
@@ -631,15 +682,7 @@ class InterceptorAI:
 
         print(f"\nEvaluating model over {n_episodes} episodes...")
 
-        # Training wraps the env in VecNormalize(norm_obs=True), so the
-        # policy was fit on normalized observations. If we hand it raw
-        # observations here (as a bare InterceptorEnv would), the network
-        # sees inputs far outside the distribution it was trained on and
-        # produces meaningless actions. Reload the saved running obs
-        # statistics (vec_normalize.pkl, saved next to the model) and apply
-        # them here too, with training=False so eval doesn't perturb the
-        # stats and norm_reward=False so reported rewards stay on the raw
-        # per-episode scale.
+
         env = DummyVecEnv([lambda: self.create_env(use_jink=use_jink)])
         vec_normalize_path = None
         if self.model_path:
