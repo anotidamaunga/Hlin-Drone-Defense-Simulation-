@@ -333,7 +333,7 @@ class InterceptorEnv(gym.Env):
                 reward += 0.5 * reduction
 
         # rel_pos/range_mag computed unconditionally (not just inside the
-        # closing-course check below) since the drift-away penalty needs
+        # closing-course check below) since the closing-speed term needs
         # them regardless of episode step count or exact-zero miss_dist.
         rel_pos = self.threat_state[:3] - self.interceptor_state[:3]
         range_mag = np.linalg.norm(rel_pos)
@@ -344,35 +344,14 @@ class InterceptorEnv(gym.Env):
             if np.dot(rel_pos, rel_vel) < 0:  # Closing
                 reward += 0.1
 
-        # Penalty for drifting away from the threat when idle: the
-        # interceptor's own velocity component pointing away from the
-        # threat (independent of what the threat itself is doing, unlike
-        # the closing-course bonus above which uses relative velocity).
-        # Without this, a policy trained in an environment where most
-        # episodes resolve quickly (fast threat drift + reactive evasion
-        # mean most engagements are short) gets little experience with an
-        # extended "threat hasn't been caught yet, keep pressing" phase,
-        # and observed behavior was to wander off with increasing speed
-        # once an engagement ran past a quick resolution -- there was
-        # nothing in training to teach it that abandoning pursuit is bad
-        # if the reward stops accumulating fast negative miss-distance
-        # penalties anyway once it's already far away.
+
         if range_mag > 1e-6:
             own_radial_vel = np.dot(self.interceptor_state[3:], rel_pos) / range_mag
-            if own_radial_vel < 0:
-                reward -= 0.2 * abs(own_radial_vel)
+            reward += 0.2 * own_radial_vel
 
-        # Control effort penalty (minimize acceleration)
-        reward -= 0.001 * np.linalg.norm(action)
 
-        # Smoothness penalty (penalize large changes in action)
-        if hasattr(self, 'prev_action') and len(action) > 0:
-            reward -= 0.001 * np.linalg.norm(action - self.prev_action)
 
-        # Bonus for being close to threat. Layered (additive, not elif) so
-        # the gradient gets progressively steeper the closer the agent gets
-        # to the 2m intercept threshold, instead of a single coarse bonus
-        # that's roughly flat over the last 10m where precision matters most.
+
         reward += max(0.0, 20.0 - miss_dist) * 0.1
         reward += max(0.0, 10.0 - miss_dist) * 0.1
         reward += max(0.0, 5.0 - miss_dist) * 0.6
@@ -381,12 +360,7 @@ class InterceptorEnv(gym.Env):
         alt_diff = abs(self.threat_state[2] - self.interceptor_state[2])
         reward -= 0.01 * alt_diff
 
-        # Scale the dense per-step shaping reward to a per-simulated-second
-        # basis. With SIM_DT=0.01 there are 100 integration steps per
-        # second, so leaving this unscaled let the miss-distance term
-        # accumulate ~100x faster than the weights were tuned for, drowning
-        # out the +/-50 terminal intercept bonus/penalty over any episode
-        # longer than a few hundred steps.
+
         reward *= self.dt
 
         return reward
