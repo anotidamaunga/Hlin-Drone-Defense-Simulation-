@@ -104,3 +104,10 @@ exercises the AI in isolation.
 Nearly every physical and behavioral parameter — drone mass, thrust/tilt
 limits, controller gains, threat evasion behavior, PN navigation constant,
 Kalman noise assumptions, RL training length — lives in `config.py`.
+
+### Main Problem
+
+Currently, I can not seem to find a way to have the interceptor drone take off fast and deal with the Threat. The slow acceleration
+and the increased protected zone radius is the reason why the success rate is so low. I have tried increasing the Proportional navigation acceleration gain and it still hasn't improved.
+Also the ai only version is fast but eventually misses the mark and performs worse than the proportional navigation only version.A blend of both performed really well, although the success
+rate was still too low.
